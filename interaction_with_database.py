@@ -35,3 +35,14 @@ def insert_lat_lon_in_database(user_id: int, latitude: float, longitude: float):
                         WHERE user_id = {user_id}
                         """)
     con.commit()
+    
+
+def get_lat_lon_by_user_id(user_id: int) -> (float, float):
+    con = sqlite3.connect("data.sqlite")
+    cur = con.cursor()
+    res = cur.execute(f"""
+                        SELECT latitude, longitude
+                        FROM locality
+                        WHERE user_id = {user_id}
+                    """).fetchone()
+    return res

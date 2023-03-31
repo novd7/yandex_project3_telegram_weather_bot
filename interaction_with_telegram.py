@@ -6,6 +6,8 @@ from telegram.ext import Application, MessageHandler, filters, CommandHandler, C
 from API_KEYS import TELEGRAM_TOKEN
 from interaction_with_database import *
 from interaction_with_YaMaps import *
+from interaction_with_YaWeather import *
+from getting_text_of_forecast import *
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG
@@ -45,6 +47,24 @@ async def locality_response(update, context):
     return ConversationHandler.END  # Константа, означающая конец диалога.
     # Все обработчики из states и fallbacks становятся неактивными.
 
+async def weather_for_day(update, context):
+    day_number = int(update.message.text.split()[1])
+    user_id = update.message.from_user.id
+    coordinates = get_lat_lon_by_user_id(user_id)
+    params = {'lat': coordinates[0], 'lon': coordinates[1]}
+    data = get_weather_for_day(day_number, **params)
+    message = get_message_text_for_day_forecast(data)
+    await update.message.reply_html(message)
+    
+    
+async def weather_for_week(update, context):
+    user_id = update.message.from_user.id
+    coordinates = get_lat_lon_by_user_id(user_id)
+    params = {'lat': coordinates[0], 'lon': coordinates[1]}
+    data = get_weather_for_week(**params)
+    message = get_message_text_for_week_forecast(data)
+    await update.message.reply_html(message)
+    
 
 def main():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -61,6 +81,8 @@ def main():
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stop", stop))
+    application.add_handler(CommandHandler("weather_for_day", weather_for_day))
+    application.add_handler(CommandHandler("weather_for_week", weather_for_week))
     
     # application.add_handler(text_handler)
     
