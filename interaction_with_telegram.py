@@ -4,7 +4,9 @@ import logging
 
 import pytz
 from telegram.ext import Application, MessageHandler, \
-    filters, CommandHandler, ConversationHandler
+    filters, CommandHandler, ConversationHandler, \
+    CallbackContext
+from telegram import ReplyKeyboardMarkup
 
 from API_KEYS import TELEGRAM_TOKEN
 from getting_text_of_forecast import *
@@ -17,7 +19,9 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-QUEUE = asyncio.Queue
+TIME_ZONE = pytz.timezone('Europe/Moscow')
+APPLICATION = Application.builder().token(TELEGRAM_TOKEN).build()
+CONTEXT = CallbackContext(APPLICATION)
 
 
 async def start(update, context):
@@ -49,13 +53,23 @@ async def locality_response(update, context):
     coords = get_coords_by_city_name(locality)
     user_id = update.message.from_user.id
     insert_lat_lon_in_database(user_id, *coords)
-    await update.message.reply_text("Я запомнил Ваш город")
+    reply_keyboard = [
+        ['Прогноз на сегодня', 'Прогноз на завтра'],
+        ['Прогноз на неделю'],
+        ['Настройки']
+    ]
+    markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
+    await update.message.reply_text(
+        "Я запомнил Ваш город",
+        reply_markup=markup
+    )
     return ConversationHandler.END  # Константа, означающая конец диалога.
     # Все обработчики из states и fallbacks становятся неактивными.
 
 
-async def weather_for_day(update, context):
-    day_number = int(update.message.text.split()[1])
+async def weather_for_day(update, context, day_number=None):
+    if day_number is None:
+        day_number = int(update.message.text.split()[1])
     user_id = update.message.from_user.id
     coordinates = get_lat_lon_by_user_id(user_id)
     params = {'lat': coordinates[0], 'lon': coordinates[1]}
@@ -82,50 +96,106 @@ def func_of_daily_forecast_autosend(chat_id, day_number=0):
     requests.post(api_url, json={'chat_id': chat_id, 'text': message, "parse_mode": "html"})
 
 
-async def daily_forecast_autosend(update, context):
-    hour = datetime.datetime.now(tz=pytz.timezone('Europe/Moscow')).hour
-    minute = datetime.datetime.now(tz=pytz.timezone('Europe/Moscow')).minute
-    second = datetime.datetime.now(tz=pytz.timezone('Europe/Moscow')).second + 1
-    chat_id = update.message.chat_id
-    context.job_queue.run_daily(
+async def daily_forecast_autosend(update, context, time: datetime.time, chat_id=None):
+    print(chat_id, "-", time)
+    hour = time.hour
+    minute = time.minute
+    second = time.second + 1
+    if chat_id is None:
+        chat_id = update.message.chat_id
+    insert_notification_time(chat_id, hour, minute)
+    CONTEXT.job_queue.run_daily(
         lambda *args: func_of_daily_forecast_autosend(chat_id),
         datetime.time(
             hour=hour,
             minute=minute,
             second=second,
-            tzinfo=pytz.timezone('Europe/Moscow')
+            tzinfo=TIME_ZONE
         ),
         chat_id=chat_id
     )
 
 
-def func_of_weekly_forecast_autosend(chat_id):
-    api_url = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage'
-    coordinates = get_lat_lon_by_user_id(chat_id)
-    params = {'lat': coordinates[0], 'lon': coordinates[1]}
-    data = get_weather_for_week(**params)
-    message = get_message_text_for_week_forecast(data)
-    requests.post(api_url, json={'chat_id': chat_id, 'text': message, "parse_mode": "html"})
-
-
-async def weekly_forecast_autosend(update, context):
-    year = datetime.datetime.now(tz=pytz.timezone('Europe/Moscow')).year
-    day = datetime.datetime.now(tz=pytz.timezone('Europe/Moscow')).day
-    month = datetime.datetime.now(tz=pytz.timezone('Europe/Moscow')).day
-    hour = datetime.datetime.now(tz=pytz.timezone('Europe/Moscow')).hour
-    minute = datetime.datetime.now(tz=pytz.timezone('Europe/Moscow')).minute
-    second = datetime.datetime.now(tz=pytz.timezone('Europe/Moscow')).second + 1
+def restart_schedules():
+    data = get_schedules()
+    for chat_id, hour, minute in data:
+        print(chat_id, hour, minute)
+        CONTEXT.job_queue.run_daily(
+            lambda *args: func_of_daily_forecast_autosend(chat_id),
+            datetime.time(
+                hour=hour,
+                minute=minute,
+                second=0,
+                tzinfo=TIME_ZONE
+            ),
+            chat_id=chat_id
+        )
+        print(chat_id, hour, minute)
+    print("Done")
+    
+    
+async def text_listener(update, context):
+    message_text = update.message.text
     chat_id = update.message.chat_id
-    context.job_queue.run_repeating(
-        lambda *args: func_of_weekly_forecast_autosend(chat_id),
-        datetime.timedelta(days=7),
-        chat_id=chat_id
+    if message_text == "Прогноз на сегодня":
+        await weather_for_day(update, context, day_number=0)
+    elif message_text == "Прогноз на завтра":
+        await weather_for_day(update, context, day_number=1)
+    elif message_text == "Прогноз на неделю":
+        await weather_for_week(update, context)
+    elif message_text == "Настройки":
+        reply_keyboard = [
+            ['Сменить город'],
+            ['Сменить время уведомления'],
+            ['Выйти из настроек']
+        ]
+        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
+        await update.message.reply_text(
+            "Вот и настройки ⬇️\n"
+            "Посмотрите на клавиатуру Телеграмма",
+            reply_markup=markup
+        )
+    elif message_text == "Сменить город":
+        await update.message.reply_text(
+            "Давайте начнём всё с начала! Напишите /start"
+        )
+    elif message_text == "Выйти из настроек":
+        reply_keyboard = [
+            ['Прогноз на сегодня', 'Прогноз на завтра'],
+            ['Прогноз на неделю'],
+            ['Настройки']
+        ]
+        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
+        await update.message.reply_text(
+            "Всё настроили\n"
+            "Посмотрите на клавиатуру Телеграмма",
+            reply_markup=markup
+        )
+    elif message_text == "Сменить время уведомления":
+        await daily_forecast_autosend(None, None, datetime.datetime.now(tz=TIME_ZONE), chat_id)
+        await update.message.reply_text(
+            "Теперь каждый день в это время я буду "
+            "присылать Вам погоду. Вот так ⬇️"
+        )
+    else:
+        await update.message.reply_text(
+            "Извините, но я Вас не понимаю."
+            "Напишите /help"
+        )
+        
+        
+async def help_command(update, context):
+    await update.message.reply_text(
+        "Помощь:\n"
+        "Обратите внимание на клавиатуру Телеграмма."
+        "На ней Вы увидите все нужные функции.\n"
+        "Клавиатура расположена ниже строки ввода "
+        "текста в приложении и слева от значка «Скрепка»"
+        "в на сайте."
     )
 
 
 def main():
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
-    
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -133,14 +203,17 @@ def main():
         },
         fallbacks=[CommandHandler('stop', stop)]
     )
-    application.add_handler(conv_handler)
+    APPLICATION.add_handler(conv_handler)
     
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("stop", stop))
-    application.add_handler(CommandHandler("weather_for_day", weather_for_day))
-    application.add_handler(CommandHandler("weather_for_week", weather_for_week))
-    application.add_handler(CommandHandler("notifications_for_day", daily_forecast_autosend))
-    application.add_handler(CommandHandler("notifications_for_week", weekly_forecast_autosend))
+    APPLICATION.add_handler(CommandHandler("start", start))
+    APPLICATION.add_handler(CommandHandler("stop", stop))
+    APPLICATION.add_handler(CommandHandler("help", help_command))
+    APPLICATION.add_handler(CommandHandler("weather_for_day", weather_for_day))
+    APPLICATION.add_handler(CommandHandler("weather_for_week", weather_for_week))
+    APPLICATION.add_handler(CommandHandler("notifications_for_day",
+                                           lambda *args: daily_forecast_autosend(*args,
+                                                                                 datetime.datetime.now(tz=TIME_ZONE))))
+    APPLICATION.add_handler(MessageHandler(filters.TEXT, text_listener))
     
     # queue = asyncio.Queue
     # updater = Updater(TELEGRAM_TOKEN, queue)
@@ -150,7 +223,8 @@ def main():
     
     # application.add_handler(text_handler)
     
-    application.run_polling()
+    restart_schedules()
+    APPLICATION.run_polling()
 
 
 if __name__ == '__main__':
