@@ -16,8 +16,10 @@ def get_coords_by_city_name(city_name: str) -> (float, float):
     json_response = response.json()
     coords = json_response["response"]["GeoObjectCollection"]["featureMember"][0]["GeoObject"]["Point"]["pos"]
     coords = coords.split()
+    
     lat = float(coords[1])
     lon = float(coords[0])
+    
     return lat, lon
 
 

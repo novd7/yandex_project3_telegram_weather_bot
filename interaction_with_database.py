@@ -8,6 +8,7 @@ def create_bd():
     except FileNotFoundError:
         con = sqlite3.connect("data.sqlite")
         cur = con.cursor()
+        
         cur.execute("""
             CREATE TABLE locality (
                 user_id INTEGER PRIMARY KEY,
@@ -16,6 +17,7 @@ def create_bd():
             )
         """)
         con.commit()
+        
         cur.execute("""
             CREATE TABLE schedules (
                 user_id INTEGER PRIMARY KEY,
@@ -31,6 +33,7 @@ def insert_lat_lon_in_database(user_id: int, latitude: float, longitude: float):
     create_bd()
     con = sqlite3.connect("data.sqlite")
     cur = con.cursor()
+    
     try:
         cur.execute(f"""
                     INSERT INTO locality (user_id, latitude, longitude)
@@ -42,6 +45,7 @@ def insert_lat_lon_in_database(user_id: int, latitude: float, longitude: float):
                     latitude = {latitude}, longitude = {longitude}
                     WHERE user_id = {user_id}
                         """)
+        
     con.commit()
     
     
@@ -50,6 +54,7 @@ def insert_notification_time(user_id: int, every_day_forecast_hour, every_day_fo
     create_bd()
     con = sqlite3.connect("data.sqlite")
     cur = con.cursor()
+    
     try:
         cur.execute(f"""
                     INSERT INTO schedules
@@ -63,29 +68,30 @@ def insert_notification_time(user_id: int, every_day_forecast_hour, every_day_fo
                     every_day_forecast_minute = {every_day_forecast_minute}
                     WHERE user_id = {user_id}
                         """)
+        
     con.commit()
     
 
 def get_lat_lon_by_user_id(user_id: int) -> (float, float):
     con = sqlite3.connect("data.sqlite")
     cur = con.cursor()
+    
     res = cur.execute(f"""
                         SELECT latitude, longitude
                         FROM locality
                         WHERE user_id = {user_id}
                     """).fetchone()
+    
     return res
 
 
 def get_schedules():
     con = sqlite3.connect("data.sqlite")
     cur = con.cursor()
+    
     res = cur.execute(f"""
                             SELECT *
                             FROM schedules
                         """).fetchall()
+    
     return res
-
-
-if __name__ == '__main__':
-    create_bd()
