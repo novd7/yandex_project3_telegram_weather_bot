@@ -6,7 +6,7 @@ import pytz
 from telegram.ext import Application, MessageHandler, \
     filters, CommandHandler, ConversationHandler, \
     CallbackContext
-from telegram import ReplyKeyboardMarkup
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from API_KEYS import TELEGRAM_TOKEN
 from getting_text_of_forecast import *
@@ -34,11 +34,12 @@ async def start(update, context):
         )
     
     await update.message.reply_text(
-        f"Здравствуйте, {update.message.chat.first_name}! Я бот-погодник.",
+        f"Здравствуйте, {update.message.chat.first_name}! Я Бот-Погодник",
+        reply_markup=ReplyKeyboardRemove()
     )
     
     await update.message.reply_text(
-        f"Пожалуйста, напишите город, для которого хотите просматривать погоду.",
+        f"Пожалуйста, напишите название города, для которого Вы хотите просматривать погоду",
     )
     return 1
 
@@ -46,10 +47,13 @@ async def start(update, context):
 async def stop(update, context):
     
     await update.message.reply_text(
-        f"Напишите /start, чтобы начать пользоваться ботом.",
+        f"Напишите /start, чтобы начать пользоваться ботом",
     )
     
-    await update.message.reply_text("Всего доброго!")
+    await update.message.reply_text(
+        "Всего доброго!",
+        reply_markup=ReplyKeyboardRemove()
+    )
     
     return ConversationHandler.END
 
@@ -67,13 +71,13 @@ async def locality_response(update, context):
     insert_lat_lon_in_database(user_id, *coords)
     
     reply_keyboard = [
-        ['Прогноз на сегодня', 'Прогноз на завтра'],
-        ['Прогноз на неделю'],
-        ['Настройки']
+        ['‣ Прогноз на сегодня \N{sun behind cloud}', '‣ Прогноз на завтра \N{sunrise}'],
+        ['‣ Прогноз на неделю \N{calendar}', '‣ Настройки \N{gear}'],
+        ['‣ Помощь \N{compass}', '‣ Остановить бота \N{cross mark}']
     ]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
     await update.message.reply_text(
-        "Я запомнил Ваш город",
+        "Я запомнил Ваш город...",
         reply_markup=markup
     )
     
@@ -164,69 +168,97 @@ async def text_listener(update, context):
     message_text = update.message.text
     chat_id = update.message.chat_id
     
-    if message_text == "Прогноз на сегодня":
+    if message_text == '‣ Прогноз на сегодня \N{sun behind cloud}':
         await weather_for_day(update, context, day_number=0)
         
-    elif message_text == "Прогноз на завтра":
+    elif message_text == '‣ Прогноз на завтра \N{sunrise}':
         await weather_for_day(update, context, day_number=1)
         
-    elif message_text == "Прогноз на неделю":
+    elif message_text == '‣ Прогноз на неделю \N{calendar}':
         await weather_for_week(update, context)
         
-    elif message_text == "Настройки":
+    elif message_text == '‣ Настройки \N{gear}':
         reply_keyboard = [
-            ['Сменить город'],
-            ['Сменить время уведомления'],
-            ['Выйти из настроек']
+            ['‣ Сменить город \N{cityscape}'],
+            ['‣ Выбрать время уведомления \N{alarm clock}'],
+            ['‣ Выйти из настроек \N{cross mark}']
         ]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
         await update.message.reply_text(
-            "Вот и настройки ⬇️\n"
-            "Посмотрите на клавиатуру Телеграмма",
+            "Вот и настройки! \n"
+            "‣ Посмотрите на клавиатуру Телеграма ⬇️",
             reply_markup=markup
         )
+
+    elif message_text == '‣ Помощь \N{compass}':
+        await help_command(update, context)
+
+    elif message_text == '‣ Остановить бота \N{cross mark}':
+        await stop(update, context)
         
-    elif message_text == "Сменить город":
+    elif message_text == '‣ Сменить город \N{cityscape}':
         await update.message.reply_text(
-            "Давайте начнём всё с начала! Напишите /start"
+            "Для повторного выбора города перезапустите бота\n"
+            "‣ Напишите /start"
         )
         
-    elif message_text == "Выйти из настроек":
+    elif message_text == '‣ Выйти из настроек \N{cross mark}':
         reply_keyboard = [
-            ['Прогноз на сегодня', 'Прогноз на завтра'],
-            ['Прогноз на неделю'],
-            ['Настройки']
+            ['‣ Прогноз на сегодня \N{sun behind cloud}', '‣ Прогноз на завтра \N{sunrise}'],
+            ['‣ Прогноз на неделю \N{calendar}', '‣ Настройки \N{gear}'],
+            ['‣ Помощь \N{compass}', '‣ Остановить бота \N{cross mark}']
         ]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
         await update.message.reply_text(
-            "Всё настроили\n"
-            "Посмотрите на клавиатуру Телеграмма",
+            "Всё настроили! \n"
+            "‣ Посмотрите на клавиатуру Телеграма ⬇️",
             reply_markup=markup
         )
         
-    elif message_text == "Сменить время уведомления":
+    elif message_text == '‣ Выбрать время уведомления \N{alarm clock}':
         await daily_forecast_autosend(None, None, datetime.datetime.now(tz=TIME_ZONE), chat_id)
         await update.message.reply_text(
             "Теперь каждый день в это время я буду "
-            "присылать Вам погоду. Вот так ⬇️"
+            "присылать Вам погоду\n"
+            "• Вот так ⬇️"
         )
+        await update.message.reply_text()
         
     else:
         await update.message.reply_text(
-            "Извините, но я Вас не понимаю."
-            "Напишите /help"
+            "Извините, но я Вас не понимаю.\n"
+            "‣ Напишите /help или нажмите '‣ Помощь \N{compass}' на клавиатуре ниже строки ввода"
         )
         
         
 async def help_command(update, context):
     
     await update.message.reply_text(
-        "Помощь:\n"
-        "Обратите внимание на клавиатуру Телеграмма."
-        "На ней Вы увидите все нужные функции.\n"
-        "Клавиатура расположена ниже строки ввода "
-        "текста в приложении и слева от значка «Скрепка»"
-        "в на сайте."
+        "❖ Помощь ❖\n\n"
+        "• Обратите внимание на клавиатуру Телеграма — "
+        "она расположена ниже строки ввода "
+        "текста в приложении и слева от значка «скрепка» "
+        "на сайте\n"
+        "• На клавиатуре Вы увидите все нужные функции:\n\n"
+        "  ‣ Прогноз на день \N{sun behind cloud} — выводит прогноз погоды на "
+        "текущую дату (ночь, утро, день и вечер): "
+        "погоду, температуру в °C, направление и скорость ветра, влажность и атмосферное давление\n"
+        "  ‣ Прогноз на завтра \N{sunrise} — выводит прогноз погоды на завтра, считая от "
+        "текущей даты (ночь, утро, день и вечер): "
+        "погоду, температуру в °C, направление и скорость ветра, влажность и атмосферное давление\n"
+        "  ‣ Прогноз на неделю \N{calendar} — выводит прогноз погоды на неделю, считая от "
+        "текущей даты включительно (7 дат, для каждой — ночь и день): "
+        "погоду и температуру в °C\n"
+        "  ‣ Помощь \N{compass} — выводит справку со всеми доступными командами\n"
+        "  ‣ Остановить бота \N{cross mark} — выход из диалога с ботом\n"
+        "  ‣ Настройки \N{gear} — выводит дополнительную клавиатуру со следующими функциями:\n\n"
+        "        ‣ Сменить город \N{cityscape} — предлагает перезапустить бота "
+        "с помощью команды /start для повторного "
+        "выбора города\n"
+        "        ‣ Выбрать время уведомления \N{alarm clock} — выставляет текущее время для ежедневной "
+        "отправки прогноза на день\n"
+        "        ‣ Выйти из настроек \N{cross mark} — возвращает основную клавиатуру\n"
+
     )
 
 
